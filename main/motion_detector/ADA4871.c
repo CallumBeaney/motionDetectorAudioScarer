@@ -1,7 +1,5 @@
 #include "ADA4871.h"
 
-
-
 static const char* TAG = "PIR";
 
 /// @brief A state management structure for variables used in the interrupt service routine. Those variables prefixed with event_are checked for in the dedicated PIR sensor task.

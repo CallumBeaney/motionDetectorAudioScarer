@@ -9,7 +9,10 @@ idf_component_register(
     "amplifier"
     "motion_detector"
 
+  REQUIRES 
+    "freertos"
+    "driver"
+
   EMBED_FILES
-    "o.pcm" 
-    # used by MAX98357
+    "o.pcm" # the audio file used by the MAX98357
 )

@@ -10,14 +10,13 @@
 static const char* TAG = "AMP";
 
 static void ampTask(void* params);
-static esp_err_t runChannel(void);
+
 
 typedef struct _modState {
   bool initialised;
   size_t i2sBufferLength;
   i2s_chan_handle_t txChannelHandle;
 } ModuleState;
-
 
 
 static ModuleState state = {
@@ -30,8 +29,6 @@ extern const uint8_t pcmStart[] asm("_binary_o_pcm_start");
 
 // this resolves to a pointer to the byte immediately following the last valid PCM data byte
 extern const uint8_t pcmEnd[]   asm("_binary_o_pcm_end"); 
-
-
 
 
 esp_err_t amp_init(AmpConfig ac, int i2sBuffLen)
@@ -73,42 +70,39 @@ esp_err_t amp_init(AmpConfig ac, int i2sBuffLen)
 
 
 esp_err_t amp_playToSpeaker() 
-{
-  const char* ptsTAG = "amp_playToSpeaker";
-  
-  if (!state.initialised) ESP_RETURN_ON_ERROR(ESP_ERR_INVALID_STATE, ptsTAG, "Module must be initialised to play.");
-
-  esp_err_t run = runChannel();
-  ESP_RETURN_ON_ERROR(run, ptsTAG, "Failed to enable channel to a running state.");
-  
-  uint16_t* buffer = calloc(1, state.i2sBufferLength * 2);
-  if (buffer == NULL) ESP_RETURN_ON_ERROR(ESP_ERR_NO_MEM, ptsTAG, "Failed to allocate memory for i2s peripheral.");
-
-  // `buffer` will be freed from within the task 
-  // yes this is cursed and i am sorry
-  xTaskCreate(ampTask, "ampTask", 4096, buffer, 5, NULL);
-
+{ 
+  if (!state.initialised) ESP_RETURN_ON_ERROR(ESP_ERR_INVALID_STATE, TAG, "Module must be initialised to play.");
+  xTaskCreate(ampTask, "ampTask", 4096, NULL, 5, NULL);
   return ESP_OK;
 }
 
-
-
-static esp_err_t runChannel() 
-{
-  if (!state.initialised) ESP_RETURN_ON_ERROR(ESP_ERR_INVALID_STATE, TAG, "i2s channel must be initialised to run.");
-  esp_err_t ok = i2s_channel_enable(state.txChannelHandle);
-  ESP_RETURN_ON_ERROR(ok, TAG, "Failed to put the i2s channel into a running state.");
-
-  ESP_LOGD(TAG, "Set channel to running state");
-  return ok;
-}
 
 
 /// @brief This function will destroy itself after disabling the channel. this is a hack to avoid employing more complex sync primitives in the creating function.
 /// @param params a buffer for i2s writing
 static void ampTask(void* params) 
 {  
-  uint16_t* buffer = (uint16_t*)params;
+  esp_err_t err = ESP_OK;
+  bool channelEnabled = false;
+  bool writeError = false;
+  
+  vTaskDelay(pdMS_TO_TICKS(5000)); // a small delay before the audio plays
+
+  uint16_t* buffer = calloc(1, state.i2sBufferLength * 2);
+  if (buffer == NULL) {
+    ESP_LOGE(TAG, "Failed to allocate memory for i2s peripheral."); 
+    err = ESP_ERR_NO_MEM;
+    goto cleanup;
+  }
+
+  err = i2s_channel_enable(state.txChannelHandle);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to put the i2s channel into a running state."); 
+    goto cleanup;
+  }
+
+  channelEnabled = true;
+  ESP_LOGD(TAG, "Set channel to running state");
 
   size_t bytesWritten = 0;
   uint32_t offset = 0;
@@ -119,7 +113,7 @@ static void ampTask(void* params)
 
     for (int i = 0; i < state.i2sBufferLength; i++) {
       offset++;
-      buffer[i] = pcmStart[offset] << 7; // bitshifting adds a little amplitude -- 7 is distorted; 6 is loud  clear
+      buffer[i] = pcmStart[offset] << 7; // bitshifting adds a little amplitude -- 7 is distorted; 6 is loud but clear
     }
 
     esp_err_t ok = i2s_channel_write(state.txChannelHandle, buffer, state.i2sBufferLength * 2, &bytesWritten, 1000);
@@ -127,14 +121,18 @@ static void ampTask(void* params)
     if (ok == ESP_OK) {
       ESP_LOGD("ampTask", "Write Task: i2s write %d bytes\n", bytesWritten);
     } else {
+      writeError = true;
       ESP_LOGE("ampTask", "Write Task: i2s write failed");
     }
 
-    // fprintf(stdout, "size %d\noffset %lu\n", pcmEnd - pcmStart, offset);
+    ESP_LOGD(TAG, "size %d\noffset %lu\n", pcmEnd - pcmStart, offset);
   }
 
-  free(params);
-  ESP_ERROR_CHECK(i2s_channel_disable(state.txChannelHandle)); // cut out potential noise caused by leaving channel open
-  vTaskDelete(NULL); // delete this task from within itself
+  cleanup:
+    if (buffer != NULL) free(buffer);
+    if (channelEnabled) ESP_ERROR_CHECK(i2s_channel_disable(state.txChannelHandle));
+    if (writeError) ESP_LOGE(TAG, "There were issues writing to the i2s channel. Turn on debug logging and test.");
+    ESP_ERROR_CHECK(err);
+    vTaskDelete(NULL);
 }
 
