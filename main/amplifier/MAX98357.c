@@ -113,7 +113,7 @@ static void ampTask(void* params)
 
     for (int i = 0; i < state.i2sBufferLength; i++) {
       offset++;
-      buffer[i] = pcmStart[offset] << 7; // bitshifting adds a little amplitude -- 7 is distorted; 6 is loud but clear
+      buffer[i] = pcmStart[offset] << 6; // bitshifting adds a little amplitude -- 7 is distorted; 6 is loud but clear
     }
 
     esp_err_t ok = i2s_channel_write(state.txChannelHandle, buffer, state.i2sBufferLength * 2, &bytesWritten, 1000);

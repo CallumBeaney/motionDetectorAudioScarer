@@ -1,5 +1,3 @@
-// https://github.com/esp32-led-strip-lights/ELSL-aws-iot-hallway-bathroom-lights/blob/main/main/main.c#L80
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -35,7 +33,8 @@ void flashLED(void* params)
 {
   int pin = *(int*)params;
 
-  ESP_ERROR_CHECK(gpio_set_direction(pin, GPIO_MODE_INPUT_OUTPUT)); // must set to input-output to read the level 
+  // must set to input-output to read the level. This can cause a low floating voltage brightness on the LED
+  ESP_ERROR_CHECK(gpio_set_direction(pin, GPIO_MODE_INPUT_OUTPUT)); 
   ESP_ERROR_CHECK(gpio_set_level(pin, 0));
   
   while(1) if (ulTaskNotifyTake(pdFALSE, portMAX_DELAY) > 0) break;
