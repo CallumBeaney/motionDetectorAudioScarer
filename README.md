@@ -2,8 +2,6 @@
 There is a motion sensor. When it detects movement, it plays [this sound](https://www.youtube.com/watch?v=tCkGAfNHygw).  
 The time spent on making this will undoubtedly give a high ROI, long-term.  
 
-Bugs: There's a pop at the end of the audio; well documented with the MAX98357. The speaker is a little sensitive. Don't overdrive it like I did in testing.  
-  
   
 ### Equipment  
 - ESP32S3 DEVKIT C WROOM  
