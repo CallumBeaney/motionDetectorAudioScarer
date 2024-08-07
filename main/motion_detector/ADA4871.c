@@ -30,6 +30,8 @@ static volatile PirState ps = {0, 0, false, false, false, GPIO_NUM_NC, NULL};
 
 esp_err_t pir_init(gpio_num_t pin, esp_err_t (*detectionEventCallback)(void), TaskHandle_t* notificationHandler) 
 {
+  // if (!detectionEventCallback || !notificationHandler) return ESP_ERR_INVALID_ARG;
+  
   ps.pin = pin;
   ps.onDetection = detectionEventCallback;
 
@@ -44,22 +46,24 @@ void pirSetupTask(void* params)
   esp_err_t ok = ESP_OK;
   TaskHandle_t* notificationHandler = (TaskHandle_t*)params;
 
-  if (installSensor(ps.pin) != ESP_OK) goto error;
+  ok = installSensor(ps.pin);
+  if (ok != ESP_OK) goto error;
   ESP_LOGI(TAG, "PIR sensor installed on GPIO pins.");
-  ESP_LOGI(TAG, "Waiting %ds for PIR to autoconfigure to current surroundings", (int)PIR_STABILISATION_PERIOD_MS/1000);
 
+  ESP_LOGI(TAG, "Waiting %ds for PIR to autoconfigure to current surroundings", (int)PIR_STABILISATION_PERIOD_MS/1000);
   vTaskDelay(pdMS_TO_TICKS(PIR_STABILISATION_PERIOD_MS));
 
   pirEventQueue = xQueueCreate(10, sizeof(uint32_t));
   ESP_LOGI(TAG, "Event queue created.");
 
-  if (installISR(ps.pin) != ESP_OK) goto error;
+  ok = installISR(ps.pin);
+  if (ok != ESP_OK) goto error;
 
   ESP_LOGI(TAG, "ISR installed.");
 
   xTaskCreate(pirMonitoringTask, "pirTask", 4096, NULL, 3, &pirTaskHandle);
 
-  xTaskNotifyGive( *notificationHandler ); // dereference
+  xTaskNotifyGive( *notificationHandler ); // note dereference
 
   vTaskDelete(NULL);
 
@@ -107,7 +111,6 @@ esp_err_t installISR(gpio_num_t pin)
 
 /// @brief This interrupt will be triggered each time the PIR pin goes high.
 /// @attention Because this is a fairly long ISR, it can intefere with the i2s peripheral's data and cause speaker noise. Ensure the buffer length of the i2s configuration, or otherwise the priority of this interrupt, is adjusted to ameliiorate this problem.
-/// @param params Not presently used
 static void IRAM_ATTR pirHandleRoutine(void* params) 
 {
   uint32_t motionDetected = 1;
@@ -139,8 +142,6 @@ void pirMonitoringTask(void* pvParameters)
       ESP_LOGW(TAG, "Motion detected!");
       ps.event_motionDetected = false;
       if (ps.onDetection != NULL) ps.onDetection();
-      // flashLED(LED_PIN);
-      // amp_playToSpeaker();
     }
     if (ps.event_queueFull) {
       ESP_LOGW(TAG, "Motion event queue full; this event lost.");

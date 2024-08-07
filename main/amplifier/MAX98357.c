@@ -79,7 +79,6 @@ esp_err_t amp_playToSpeaker()
 
 
 /// @brief This function will destroy itself after disabling the channel. this is a hack to avoid employing more complex sync primitives in the creating function.
-/// @param params a buffer for i2s writing
 static void ampTask(void* params) 
 {  
   esp_err_t err = ESP_OK;
